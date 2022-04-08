@@ -1,88 +1,8 @@
 #!/home/kevin/.asdf/shims/python
 import argparse
-import json
 import os
 
-import dspcli
-from dspcli import Item, ItemId, Recipe
-
-
-def get_item(name: str, cache: str) -> Item:
-    index = {}
-    if os.path.isfile(cache):
-        with open(cache, "r") as f:
-            index.update(json.load(f))
-
-    if name in index:
-        item = deserialize_item(index[name])
-    else:
-        item = dspcli.get_item(name)
-        cache_item(item, cache)
-    return item
-
-
-def cache_item(item: Item, cachefile: str) -> None:
-    recipes = [
-        {
-            "input": [(x[0].__root__, x[1]) for x in r.input],
-            "output": [(x[0].__root__, x[1]) for x in r.output],
-            "duration": r.duration,
-        }
-        for r in item.recipes
-    ]
-    item_data = {
-        item.name: {
-            "name": item.name,
-            "category": item.category,
-            "description": item.description,
-            "recipes": recipes,
-        }
-    }
-
-    if os.path.isfile(cachefile):
-        with open(cachefile, "r") as f:
-            data = json.load(f)
-            data.update(item_data)
-        with open(cachefile, "w") as f:
-            json.dump(data, f, indent=2)
-    else:
-        with open(cachefile, "w") as f:
-            json.dump(item_data, f, indent=2)
-
-
-def cache_all(cache_file: str):
-    items = dspcli.list_items()
-    for id in items.components + items.buildings:
-        name = id.__root__
-        print("Caching ", name)
-        try:
-            item = dspcli.get_item(name)
-            cache_item(item, cache_file)
-        except:
-            continue
-
-
-def deserialize_recipe(r: dict) -> Recipe:
-    return Recipe(
-        input=[(ItemId.parse_obj(x[0]), x[1]) for x in r["input"]],
-        output=[(ItemId.parse_obj(x[0]), x[1]) for x in r["output"]],
-        duration=r["duration"],
-    )
-
-
-def deserialize_item(item: dict) -> Item:
-    return Item(
-        name=item["name"],
-        category=item["category"],
-        description=item["description"],
-        recipes=[deserialize_recipe(r) for r in item["recipes"]],
-    )
-
-
-def find_ingredient(item: Item, item_name: str) -> tuple[ItemId, int | None] | None:
-    for x in item.recipes[0].input:
-        if ItemId.parse_obj(item_name) in x:
-            return x
+from dspcli import Item, cache_item, get_item_cache
 
 
 def is_basic(item: Item) -> bool:
@@ -115,18 +35,25 @@ def base_quantity(item: Item, r: int = 0) -> float:
         return -1.0
 
 
-def num_factories(item: Item, target_speed: float, depth: int, cache: str, r: int = 0) -> list:
+def num_factories(
+    item: Item, target_speed: float, depth: int, cache: str, r: int = 0
+) -> list:
     cache_item(item, cache)
     speed = base_speed(item)
     if speed is None:
         speed = -1.0
-    result = [{"name": item.name, "num": target_speed / speed, "depth": depth}]
+    num = target_speed / speed
+    result = [{"name": item.name, "num": num, "depth": depth}]
+
+    print(
+        f"{num:.2f} {item.name} factories: {num * speed:.2f}/s and require:", flush=True
+    )
 
     if (depth == 0) or is_basic(item):
         return result
 
     for i in item.recipes[r].input:
-        ingredient = get_item(i[0].__root__, cache)
+        ingredient = get_item_cache(i[0].__root__, cache)
         n_consumed = i[1]
         if n_consumed is None:
             n_consumed = 0.0
@@ -150,7 +77,7 @@ def main():
     if not os.path.isdir(os.path.dirname(index_file)):
         os.makedirs(os.path.dirname(index_file))
 
-    item = get_item(args.item, index_file)
+    item = get_item_cache(args.item, index_file)
 
     speed = args.num * base_speed(item)
     if speed is None:

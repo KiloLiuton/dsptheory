@@ -2,6 +2,8 @@
 from __future__ import annotations
 import argparse
 from functools import lru_cache
+import json
+import os
 from urllib.request import urlopen
 
 from lxml.etree import Element
@@ -102,6 +104,46 @@ def list_items() -> ItemList:
         components=[ItemId.parse_obj(x[1:]) for x in tables[0].xpath(".//a/@href")],
         buildings=[ItemId.parse_obj(x[1:]) for x in tables[1].xpath(".//a/@href")],
     )
+
+
+def get_item_cache(name: str, cache: str) -> Item:
+    index = {}
+    if os.path.isfile(cache):
+        with open(cache, "r") as f:
+            index.update(json.load(f))
+
+    if name in index:
+        item = Item.parse_obj(index[name])
+    else:
+        item = get_item(name)
+        cache_item(item, cache)
+    return item
+
+
+def cache_item(item: Item, cachefile: str) -> None:
+    item_dict = item.dict()
+
+    if os.path.isfile(cachefile):
+        with open(cachefile, "r") as f:
+            data = json.load(f)
+            data.update(item_dict)
+        with open(cachefile, "w") as f:
+            json.dump(data, f, indent=2)
+    else:
+        with open(cachefile, "w") as f:
+            json.dump(item_dict, f, indent=2)
+
+
+def update_cache(cache_file: str) -> None:
+    items = list_items()
+    for id in items.components + items.buildings:
+        name = id.__root__
+        print("Caching ", name)
+        try:
+            item = get_item(name)
+            cache_item(item, cache_file)
+        except:
+            continue
 
 
 def main():
