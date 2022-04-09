@@ -45,10 +45,6 @@ def num_factories(
     num = target_speed / speed
     result = [{"name": item.name, "num": num, "depth": depth}]
 
-    print(
-        f"{num:.2f} {item.name} factories: {num * speed:.2f}/s and require:", flush=True
-    )
-
     if (depth == 0) or is_basic(item):
         return result
 
